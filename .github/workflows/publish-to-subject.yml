@@ -21,10 +21,6 @@
 #   SUBJECT_KEY         the subject key: 32 bytes as 64 hex characters or
 #                       base64. One key for the whole subject.
 #   SUBJECT_REPO        (variable) name of the subject repo
-#   BOOK_MEDIA_KEY      (secret) only if this book's media/ files were NOT
-#                       made with the public "placeholder" key: their key
-#                       (base64). Update book deletes every secret, so set it
-#                       again afterwards.
 #
 # Ways to start it:
 #   - a push to main that changes the book (see paths below) or .itemrc;
@@ -78,8 +74,6 @@ on:
       SUBJECT_REPO_TOKEN:
         required: false
       SUBJECT_KEY:
-        required: false
-      BOOK_MEDIA_KEY:
         required: false
 
 permissions:
@@ -204,8 +198,6 @@ jobs:
       - name: Build the encrypted site
         env:
           SUBJECT_KEY: ${{ secrets.SUBJECT_KEY }}
-          # the tool still reads the old name
-          QUIZ_MEDIA_OLD_KEY: ${{ secrets.BOOK_MEDIA_KEY }}
         run: |
           echo "::add-mask::$SUBJECT_KEY"
           args=(--book book --template-tag "$TEMPLATE_TAG" --out "$RUNNER_TEMP/site")

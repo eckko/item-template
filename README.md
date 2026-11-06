@@ -16,7 +16,7 @@ are made from it by the **Create book** action in
 | `.itemrc` | One line: the item-ui version to load (`3` or `3.1.0`) |
 | `questions.json` | The question bank. A **sample**; replace it |
 | `images/favicon.png` | The browser-tab icon |
-| `media/` | The book's pictures, encrypted (`media/<id>.enc`) |
+| `media/` | The book's pictures and clips as plain files, `media/<id>.<ext>` (for example `media/u03/i07/f02.webp`; the extension follows the entry's `type` in `questions.json`). Encrypted with the subject key when published |
 | `references/` | The book's EPUB and PDF and your notes (never published as they are) |
 | `.github/workflows/publish-to-subject.yml` | Builds the encrypted reader and quiz and publishes them into a subject site made from `group-template` |
 | `.github/workflows/auto-pr.yml` | Opens a pull request when a branch is first pushed |
@@ -51,10 +51,6 @@ It finds the book's files by name in `references/`: the EPUB without "notes" in
 its name is the book (none means a quiz-only book), the EPUB with "notes" in
 its name is your notes. Two of either make the run fail. `TEMPLATE_TAG`
 defaults to `.itemrc`; a major there means the newest exact tag of it.
-
-`BOOK_MEDIA_KEY` is an optional secret, only for a book whose `media/` files
-were not made with the public placeholder key (their key, base64). Update
-book deletes every secret, so add it again after an update.
 
 The plain book never leaves this repo: the job reads the EPUB (and your notes
 EPUB) and `questions.json`, encrypts everything with the subject key inside
