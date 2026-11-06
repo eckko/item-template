@@ -22,7 +22,7 @@
 #
 # Ways to start it:
 #   - a push to main that changes the book (see paths below), or the file
-#     item-version;
+#     .itemrc;
 #   - by hand or by a script (needs this file on the default branch):
 #       gh workflow run publish-to-subject.yml \
 #         -f SUBJECT_REPO=habit-reader -f TEMPLATE_TAG=3.2.5
@@ -36,7 +36,7 @@
 #                 "owner/name". Default: the repository variable SUBJECT_REPO.
 #   TEMPLATE_TAG  an exact item UI tag such as 3.2.5 (no "v", never a
 #                 branch): it is checked out for the build tools, so it must
-#                 be a real tag. Default: the file item-version; a major such
+#                 be a real tag. Default: the file .itemrc; a major such
 #                 as 3 there means the newest 3.x.x tag.
 name: Publish encrypted book (reader + quiz)
 
@@ -48,7 +48,7 @@ on:
       - questions.json
       - media/**
       - book-structure/**
-      - item-version
+      - .itemrc
       # This file's name here, and its name in the private book repos.
       - .github/workflows/publish-to-subject.yml
       - .github/workflows/publish-encrypted-book.yml
@@ -95,7 +95,7 @@ env:
   BOOK_EPUB: references/book.epub
   NOTES_EPUB: references/notes.epub
   # The exact tag of eckko/item-ui used for the build is worked out in the
-  # step "Choose the item UI tag" (the input, else the file item-version).
+  # step "Choose the item UI tag" (the input, else the file .itemrc).
   INPUT_TAG: ${{ inputs.TEMPLATE_TAG }}
 
 jobs:
@@ -111,10 +111,10 @@ jobs:
         run: |
           tag="$INPUT_TAG"
           if [ -z "$tag" ]; then
-            tag="$(head -n1 book/item-version 2>/dev/null | tr -d '[:space:]')"
+            tag="$(head -n1 book/.itemrc 2>/dev/null | tr -d '[:space:]')"
           fi
           if ! [[ "$tag" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
-            echo "::error::item-version (or the input TEMPLATE_TAG) must be like 3 or 3.2.5, not '$tag'."
+            echo "::error::.itemrc (or the input TEMPLATE_TAG) must be like 3 or 3.2.5, not '$tag'."
             exit 1
           fi
           if ! [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
