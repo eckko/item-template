@@ -1,0 +1,70 @@
+# Opens a pull request that sets .itemrc to a new item-ui release. Started by
+# the release workflow of eckko/item-ui (repository_dispatch "item-ui-release",
+# needs its secret TEMPLATE_UPDATE_TOKEN) or by hand. Nothing changes until you
+# merge the pull request. Needs Settings > Actions > General > "Allow GitHub
+# Actions to create and approve pull requests".
+name: Update .itemrc
+
+on:
+  repository_dispatch:
+    types: [item-ui-release]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact item-ui tag, for example 3.4.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-version-files
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@v4
+
+      - name: Work out the new values
+        id: values
+        env:
+          EVENT: ${{ github.event_name == 'repository_dispatch' && github.event.action || 'manual' }}
+          SENT: ${{ github.event.client_payload.version }}
+          MANUAL: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          ver="${SENT:-${MANUAL:-}}"
+          [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::The version must be an exact tag like 3.4.0."; exit 1; }
+          current=$(head -n1 .itemrc 2>/dev/null | tr -d '[:space:]' || true)
+          if [ "$current" = "$ver" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"; echo ".itemrc already has $ver."; exit 0
+          fi
+          printf '%s\n' "$ver" > .itemrc
+          {
+            echo "changed=true"
+            echo "title=Use item-ui $ver"
+            echo "branch=chore/itemrc-$ver"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open a pull request
+        if: steps.values.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ steps.values.outputs.title }}
+          BRANCH: ${{ steps.values.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add .itemrc
+          git commit -q -m "$TITLE"
+          git push -q origin "$BRANCH"
+          gh pr create --base "$(git rev-parse --abbrev-ref origin/HEAD | sed 's#origin/##')" --head "$BRANCH" \
+            --title "$TITLE" --body "Opened by the update workflow after a release. Merge it to adopt the new version." \
+            --assignee "$GITHUB_REPOSITORY_OWNER"

@@ -1,16 +1,16 @@
 <!doctype html>
 <!--
   Made from the item UI's tools/make_book_index.py, then changed to read the
-  version from the file item-version. This page only shows the favicon,
-  reads item-version and starts js/boot.js,
+  version from the file .itemrc. This page only shows the favicon,
+  reads .itemrc and starts js/boot.js,
   which loads the quiz page and every css/ and js/ file from the CDN at that
   version.
 
-  item-version (one line) is either
+  .itemrc (one line) is either
     "3"      the newest 3.x.x (a major version: bug fixes and features of
              that major arrive on their own), or
     "3.1.0"  exactly that release (never changes).
-  Change it with tools/set_item_version.py or by editing item-version.
+  Change it with tools/set_item_version.py or by editing .itemrc.
   questions.json, images/ and media/ stay here.
 -->
 <html lang="en">
@@ -19,7 +19,7 @@
   <link rel="icon" href="images/favicon.png" type="image/png">
   <script>
     (function loadTemplate() {
-      // Used when item-version is missing or not a version.
+      // Used when .itemrc is missing or not a version.
       var DEFAULT_VERSION = "3";
       var VERSION = /^\d+(\.\d+){0,2}$/;
 
@@ -32,20 +32,20 @@
         document.head.appendChild(script);
       }
 
-      // The first line of item-version, or DEFAULT_VERSION.
+      // The first line of .itemrc, or DEFAULT_VERSION.
       function chooseVersion(text) {
         var version = String(text || "").split("\n")[0].trim();
         if (VERSION.test(version)) {
           return version;
         }
         if (version) {
-          console.warn("item-version: '" + version +
+          console.warn(".itemrc: '" + version +
             "' is not like 3 or 3.1.0; using " + DEFAULT_VERSION);
         }
         return DEFAULT_VERSION;
       }
 
-      fetch("item-version", { cache: "no-cache" })
+      fetch(".itemrc", { cache: "no-cache" })
         .then(function read(response) {
           return response.ok ? response.text() : "";
         })
