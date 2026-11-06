@@ -38,15 +38,28 @@ exists, so keep that file.
 
 The workflow needs the secrets `SUBJECT_REPO_TOKEN` (a token for the subject
 repo only, Contents: read and write) and `SUBJECT_KEY` (the subject key), and
-the variable `SUBJECT_REPO` (the subject repo's name). Create book sets all
-three. It runs on a push to `main` that changes `references/`,
-`questions.json`, `media/`, `book-structure/` or `.itemrc`, or by hand:
+the variable `SUBJECT_REPO` (the subject repo's name, in the same account).
+Create book sets all three. A run without them fails, on a push and by hand.
+It runs on a push to `main` that changes `references/`, `questions.json`,
+`media/`, `book-structure/` or `.itemrc`, or by hand:
 
 ```
-gh workflow run publish-to-subject.yml -f SUBJECT_REPO=habit -f TEMPLATE_TAG=3.4.0
+gh workflow run publish-to-subject.yml -f TEMPLATE_TAG=3.4.0
 ```
+
+It finds the book's files by name in `references/`: the EPUB without "notes" in
+its name is the book (none means a quiz-only book), the EPUB with "notes" in
+its name is your notes. Two of either make the run fail. `TEMPLATE_TAG`
+defaults to `.itemrc`; a major there means the newest exact tag of it.
+
+`BOOK_MEDIA_KEY` is an optional secret, only for a book whose `media/` files
+were not made with the public placeholder key (their key, base64). Update
+book deletes every secret, so add it again after an update.
 
 The plain book never leaves this repo: the job reads the EPUB (and your notes
 EPUB) and `questions.json`, encrypts everything with the subject key inside
 the runner and publishes only encrypted files, under names that say nothing
 about the book (see `ai-context/opaque-site.md` in item-ui).
+
+`fork-warning.yml` is the same daily check the public repos have; in a private
+repo it does nothing.
