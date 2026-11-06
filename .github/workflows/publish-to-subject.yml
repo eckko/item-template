@@ -1,0 +1,193 @@
+# Builds the encrypted book site (reader + quiz) of this book and publishes it
+# into a subject site made from eckko/group-template. It is part of
+# eckko/item-template, so every book repo made from it has it; set the env
+# values below (or the repository variable SUBJECT_REPO).
+#
+# The plain book never leaves this repo: the job reads the EPUB (and your
+# notes EPUB) and questions.json, encrypts everything with the subject key
+# inside the runner and publishes only the small pages, book.json and
+# *.enc files. The build tools and the publish script both come from
+# eckko/item-ui at TEMPLATE_TAG (the same tag readers load
+# the code from), so the subject site needs no tools of its own.
+#
+# One-time setup (Settings > Secrets and variables > Actions of this repo):
+#   SUBJECT_REPO_TOKEN         fine-grained token for the subject repo only,
+#                              "Contents: Read and write"
+#   SUBJECT_KEY                the subject key: 32 bytes as 64 hex characters
+#                              or base64. One key for the whole subject.
+#   QUIZ_MEDIA_OLD_KEY         only if this book's media/ files were NOT made
+#                              with the public "placeholder" key: their key
+#                              (base64)
+#   (optional variable) SUBJECT_REPO  name of the subject repo
+#
+# Ways to start it:
+#   - a push to main that changes the book (see paths below), or the file
+#     item-version;
+#   - by hand or by a script (needs this file on the default branch):
+#       gh workflow run publish-to-subject.yml \
+#         -f SUBJECT_REPO=habit-reader -f TEMPLATE_TAG=3.2.5
+#   - from another workflow of any repo that can see this one:
+#       uses: eckko/<book>/.github/workflows/publish-to-subject.yml@main
+#       with: { SUBJECT_REPO: habit-reader, TEMPLATE_TAG: 3.2.5 }
+#       secrets: inherit
+#
+# Inputs (both optional):
+#   SUBJECT_REPO  the subject site to publish into, "name" (owner eckko) or
+#                 "owner/name". Default: the repository variable SUBJECT_REPO.
+#   TEMPLATE_TAG  an exact item UI tag such as 3.2.5 (no "v", never a
+#                 branch): it is checked out for the build tools, so it must
+#                 be a real tag. Default: the file item-version; a major such
+#                 as 3 there means the newest 3.x.x tag.
+name: Publish encrypted book (reader + quiz)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - references/**
+      - questions.json
+      - media/**
+      - book-structure/**
+      - item-version
+      # This file's name here, and its name in the private book repos.
+      - .github/workflows/publish-to-subject.yml
+      - .github/workflows/publish-encrypted-book.yml
+  workflow_dispatch:
+    inputs:
+      SUBJECT_REPO:
+        description: 'Subject site to publish into: "name" or "owner/name"'
+        required: false
+        type: string
+      TEMPLATE_TAG:
+        description: "Exact template tag, for example 3.2.5"
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      SUBJECT_REPO:
+        description: 'Subject site to publish into: "name" or "owner/name"'
+        required: false
+        type: string
+      TEMPLATE_TAG:
+        description: "Exact template tag, for example 3.2.5"
+        required: false
+        type: string
+    secrets:
+      SUBJECT_REPO_TOKEN:
+        required: false
+      SUBJECT_KEY:
+        required: false
+      QUIZ_MEDIA_OLD_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-encrypted-book
+  cancel-in-progress: false
+
+env:
+  # The input (by hand, script or caller workflow) wins over the repository
+  # variable. A bare name gets the owner eckko.
+  SUBJECT_REPO: ${{ inputs.SUBJECT_REPO && (contains(inputs.SUBJECT_REPO, '/') && inputs.SUBJECT_REPO || format('eckko/{0}', inputs.SUBJECT_REPO)) || format('eckko/{0}', vars.SUBJECT_REPO || 'YOUR_SUBJECT_REPO') }}
+  # Leave empty for a quiz-only book (no reader).
+  BOOK_EPUB: references/book.epub
+  NOTES_EPUB: references/notes.epub
+  # The exact tag of eckko/item-ui used for the build is worked out in the
+  # step "Choose the item UI tag" (the input, else the file item-version).
+  INPUT_TAG: ${{ inputs.TEMPLATE_TAG }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out this book repo
+        uses: actions/checkout@v4
+        with:
+          path: book
+
+      - name: Choose the item UI tag
+        run: |
+          tag="$INPUT_TAG"
+          if [ -z "$tag" ]; then
+            tag="$(head -n1 book/item-version 2>/dev/null | tr -d '[:space:]')"
+          fi
+          if ! [[ "$tag" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+            echo "::error::item-version (or the input TEMPLATE_TAG) must be like 3 or 3.2.5, not '$tag'."
+            exit 1
+          fi
+          if ! [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            # a major or minor: the newest exact tag that starts with it
+            tag="$(git ls-remote --tags --refs https://github.com/eckko/item-ui \
+              | sed 's#.*refs/tags/##' | grep -E "^${tag//./\\.}\.[0-9.]+$" \
+              | sort -V | tail -n1)"
+            [ -n "$tag" ] || { echo "::error::No item UI tag starts with that version."; exit 1; }
+          fi
+          echo "TEMPLATE_TAG=$tag" >> "$GITHUB_ENV"
+          echo "Building with item UI $tag"
+
+      - name: Check the setup
+        id: setup
+        env:
+          TOKEN: ${{ secrets.SUBJECT_REPO_TOKEN }}
+          KEY: ${{ secrets.SUBJECT_KEY }}
+        run: |
+          if [[ "$SUBJECT_REPO" == *YOUR_* || "$BOOK_EPUB" == *YOUR_* ]]; then
+            echo "::notice::SUBJECT_REPO or BOOK_EPUB is not set; nothing published."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [ -z "$TOKEN" ]; then
+            echo "::error::The secret SUBJECT_REPO_TOKEN is missing."
+            exit 1
+          elif [ -z "$KEY" ]; then
+            echo "::error::The secret SUBJECT_KEY is missing."
+            exit 1
+          elif ! [[ "$SUBJECT_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo "::error::SUBJECT_REPO must be like 'habit-reader' or 'eckko/habit-reader'."
+            exit 1
+          elif ! [[ "$TEMPLATE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::TEMPLATE_TAG must be an exact tag like 3.1.0 (no v, no branch)."
+            exit 1
+          fi
+
+      - name: Check out the subject site
+        if: steps.setup.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SUBJECT_REPO }}
+          token: ${{ secrets.SUBJECT_REPO_TOKEN }}
+          path: subject
+
+      - name: Check out the build tools (template at its tag)
+        if: steps.setup.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: eckko/item-ui
+          ref: ${{ env.TEMPLATE_TAG }}
+          path: template
+
+      - name: Set up Python
+        if: steps.setup.outputs.skip != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the build tools' packages
+        if: steps.setup.outputs.skip != 'true'
+        run: pip install beautifulsoup4 lxml cryptography
+
+      - name: Build the encrypted site
+        if: steps.setup.outputs.skip != 'true'
+        env:
+          SUBJECT_KEY: ${{ secrets.SUBJECT_KEY }}
+          QUIZ_MEDIA_OLD_KEY: ${{ secrets.QUIZ_MEDIA_OLD_KEY }}
+        run: |
+          echo "::add-mask::$SUBJECT_KEY"
+          args=(--book book --template-tag "$TEMPLATE_TAG" --out "$RUNNER_TEMP/site")
+          if [ -n "$BOOK_EPUB" ]; then args+=(--epub "$BOOK_EPUB"); fi
+          if [ -n "$NOTES_EPUB" ]; then args+=(--notes-epub "$NOTES_EPUB"); fi
+          python3 template/tools/book_build/build_book.py "${args[@]}"
+
+      - name: Publish
+        if: steps.setup.outputs.skip != 'true'
+        run: template/tools/site/publish_pool.sh "$RUNNER_TEMP/site" subject
