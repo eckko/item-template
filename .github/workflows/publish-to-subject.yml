@@ -38,7 +38,7 @@
 #                 branch): it is checked out for the build tools, so it must
 #                 be a real tag. Default: the file .itemrc; a major such
 #                 as 3 there means the newest 3.x.x tag.
-name: Publish encrypted book (reader + quiz)
+name: Publish book
 
 on:
   push:
@@ -84,7 +84,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: publish-encrypted-book
+  group: publish-book
   cancel-in-progress: false
 
 env:
